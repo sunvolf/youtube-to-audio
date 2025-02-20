@@ -122,7 +122,10 @@ def task_status(task_id):
             return jsonify(task.info), 200
         elif task.state == "FAILURE":
             # 返回具体的错误信息
-            return jsonify({"error": task.result.get("error", "未知错误")}), 500
+            error_message = task.result.get("error", "未知错误")
+            if "HTTP Error 403" in error_message:
+                error_message += "（可能是 IP 地址被限制，请稍后再试）"
+            return jsonify({"error": error_message}), 500
         else:
             return jsonify({"error": "任务状态未知"}), 500
     except Exception as e:
