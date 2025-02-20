@@ -39,8 +39,8 @@ def process_youtube_video(self, youtube_url, output_format="mp3"):
         YouTube(youtube_url).streams.first()  # 触发 pytube 初始化
         YouTube._user_agent = random.choice(user_agents)
 
-        # 添加延迟以减少请求频率
-        sleep(2)
+        # 动态延迟 1-8 秒
+        sleep(random.uniform(1, 8))
 
         # 下载视频
         yt = YouTube(youtube_url)

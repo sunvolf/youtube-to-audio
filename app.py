@@ -62,7 +62,7 @@ def admin():
         api_keys = load_api_keys()
         if action == "generate":
             new_key = str(uuid.uuid4())
-            expiry_time = datetime.now() + timedelta(days=7)  # 设置有效期为 7 天
+            expiry_time = datetime.now() + timedelta(days=180)  # 设置有效期为 180 天
             api_keys.add((new_key, expiry_time))
             save_api_keys(api_keys)
             return redirect(url_for("admin"))
