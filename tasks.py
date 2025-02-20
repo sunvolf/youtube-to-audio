@@ -5,6 +5,7 @@ from moviepy.editor import AudioFileClip
 import boto3
 from dotenv import load_dotenv
 from time import sleep
+import random
 
 # 加载 .env 文件
 load_dotenv()
@@ -29,6 +30,15 @@ s3_client = boto3.client(
 @app.task(bind=True, max_retries=3)
 def process_youtube_video(self, youtube_url, output_format="mp3"):
     try:
+        # 设置随机 User-Agent
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        ]
+        YouTube(youtube_url).streams.first()  # 触发 pytube 初始化
+        YouTube._user_agent = random.choice(user_agents)
+
         # 添加延迟以减少请求频率
         sleep(2)
 
@@ -58,8 +68,8 @@ def process_youtube_video(self, youtube_url, output_format="mp3"):
 
         return {"message": "转换成功", "file_url": file_url}
     except Exception as e:
-        # 捕获 HTTP 429 错误并重试
-        if "HTTP Error 429" in str(e):
+        # 捕获 HTTP 403 错误并重试
+        if "HTTP Error 403" in str(e):
             self.retry(countdown=5)  # 5 秒后重试
         # 返回可序列化的错误信息
         return {"error": str(e)}
