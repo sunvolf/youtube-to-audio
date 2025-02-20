@@ -81,11 +81,14 @@ def convert():
 def task_status(task_id):
     """查询任务状态"""
     from tasks import process_youtube_video
-    task = process_youtube_video.AsyncResult(task_id)
-    if task.ready():
-        return jsonify(task.result), 200
-    else:
-        return jsonify({"message": "任务仍在处理中"}), 202
+    try:
+        task = process_youtube_video.AsyncResult(task_id)
+        if task.ready():
+            return jsonify(task.result), 200
+        else:
+            return jsonify({"message": "任务仍在处理中"}), 202
+    except Exception as e:
+        return jsonify({"error": f"查询任务状态失败: {str(e)}"}), 500
 
 
 # ====================
