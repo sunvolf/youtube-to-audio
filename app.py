@@ -9,6 +9,13 @@ load_dotenv()
 # 初始化 Flask
 app = Flask(__name__)
 
+# ====================
+# 路由：主页（默认根路径）
+# ====================
+@app.route("/")
+def index():
+    return "Welcome to the YouTube to Audio Converter!"
+
 # 加载或生成 API 秘钥
 API_KEYS_FILE = "/tmp/api_keys.txt"  # Render 使用临时存储
 if not os.path.exists(API_KEYS_FILE):
