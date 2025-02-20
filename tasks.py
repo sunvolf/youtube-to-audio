@@ -11,8 +11,9 @@ load_dotenv()
 # 初始化 Celery
 app = Celery('tasks', broker=os.getenv("CELERY_BROKER_URL"))
 
-# 配置 Celery
+# 配置结果后端
 app.conf.update(
+    result_backend=os.getenv("CELERY_BROKER_URL"),  # 使用相同的 Redis 实例作为结果后端
     broker_connection_retry=True,  # 显式启用重试
     broker_connection_max_retries=3,  # 最大重试次数
 )
