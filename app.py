@@ -18,20 +18,31 @@ def load_api_keys():
     if not os.path.exists(API_KEYS_FILE):
         with open(API_KEYS_FILE, "w") as f:
             f.write("default-key\n")  # 默认秘钥
-    with open(API_KEYS_FILE, "r") as f:
-        api_keys = []
-        for line in f:
-            parts = line.strip().split("|")
-            if len(parts) == 2:  # 格式：key|expiry_time
-                key, expiry_time = parts
-                if datetime.strptime(expiry_time, "%Y-%m-%d %H:%M:%S") > datetime.now():
-                    api_keys.append(key)
+    api_keys = []
+    try:
+        with open(API_KEYS_FILE, "r") as f:
+            for line in f:
+                parts = line.strip().split("|")
+                if len(parts) == 2:  # 格式：key|expiry_time
+                    key, expiry_time_str = parts
+                    try:
+                        expiry_time = datetime.strptime(expiry_time_str, "%Y-%m-%d %H:%M:%S")
+                        if expiry_time > datetime.now():
+                            api_keys.append((key, expiry_time))
+                    except ValueError:
+                        # 如果日期格式解析失败，跳过该行
+                        continue
+    except Exception as e:
+        print(f"Error loading API keys: {str(e)}")
     return set(api_keys)
 
 def save_api_keys(api_keys):
-    with open(API_KEYS_FILE, "w") as f:
-        for key, expiry_time in api_keys.items():
-            f.write(f"{key}|{expiry_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    try:
+        with open(API_KEYS_FILE, "w") as f:
+            for key, expiry_time in api_keys:
+                f.write(f"{key}|{expiry_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    except Exception as e:
+        print(f"Error saving API keys: {str(e)}")
 
 # ====================
 # 路由：主页（默认根路径）
@@ -53,12 +64,12 @@ def admin():
             new_key = str(uuid.uuid4())
             expiry_time = datetime.now() + timedelta(days=7)  # 设置有效期为 7 天
             api_keys.add((new_key, expiry_time))
-            save_api_keys({key: expiry_time for key, expiry_time in api_keys})
+            save_api_keys(api_keys)
             return redirect(url_for("admin"))
         elif action == "delete":
             key_to_delete = request.form.get("key")
             api_keys = {(key, expiry_time) for key, expiry_time in api_keys if key != key_to_delete}
-            save_api_keys({key: expiry_time for key, expiry_time in api_keys})
+            save_api_keys(api_keys)
             return redirect(url_for("admin"))
 
     # 过滤掉默认秘钥
