@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 import os
 import uuid
+from dotenv import load_dotenv
 
-# ====================
+# 加载 .env 文件
+load_dotenv()
+
 # 初始化 Flask
-# ====================
 app = Flask(__name__)
 
 # 加载或生成 API 秘钥

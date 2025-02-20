@@ -3,11 +3,13 @@ import os
 from pytube import YouTube
 from moviepy.editor import AudioFileClip
 import boto3
+from dotenv import load_dotenv
 
-# ====================
+# 加载 .env 文件
+load_dotenv()
+
 # 初始化 Celery
-# ====================
-app = Celery('tasks', broker='redis://localhost:6379/0')
+app = Celery('tasks', broker=os.getenv("CELERY_BROKER_URL"))
 
 # 加载 AWS 配置
 s3_client = boto3.client(
