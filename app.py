@@ -96,7 +96,7 @@ def convert():
     youtube_url = data.get("youtube_url")
     output_format = data.get("output_format", "mp3").lower()
 
-    if not youtube_url:
+    if not youtube_url or "youtube.com/watch" not in youtube_url:
         return jsonify({"error": "请输入有效的 YouTube 视频链接"}), 400
 
     if output_format not in ["mp3", "m4a"]:
@@ -114,14 +114,14 @@ def task_status(task_id):
     from tasks import process_youtube_video
     try:
         task = process_youtube_video.AsyncResult(task_id)
-        if task.ready():
-            result = task.result
-            if isinstance(result, dict):  # 如果结果是字典，直接返回
-                return jsonify(result), 200
-            else:  # 如果结果不是字典，将其转换为字符串
-                return jsonify({"message": str(result)}), 200
-        else:
+        if task.state == "PENDING":
             return jsonify({"message": "任务仍在处理中"}), 202
+        elif task.state == "PROGRESS":
+            return jsonify({"message": task.info.get("status")}), 202
+        elif task.state == "SUCCESS":
+            return jsonify(task.info), 200
+        else:
+            return jsonify({"error": "任务失败"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
