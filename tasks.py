@@ -4,6 +4,7 @@ from pytube import YouTube
 from moviepy.editor import AudioFileClip
 import boto3
 from dotenv import load_dotenv
+from time import sleep
 
 # 加载 .env 文件
 load_dotenv()
@@ -25,8 +26,8 @@ s3_client = boto3.client(
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
 )
 
-@app.task
-def process_youtube_video(youtube_url, output_format="mp3"):
+@app.task(bind=True, max_retries=3)
+def process_youtube_video(self, youtube_url, output_format="mp3"):
     try:
         # 下载视频
         yt = YouTube(youtube_url)
@@ -54,4 +55,7 @@ def process_youtube_video(youtube_url, output_format="mp3"):
 
         return {"message": "转换成功", "file_url": file_url}
     except Exception as e:
+        # 捕获 HTTP 429 错误并重试
+        if "HTTP Error 429" in str(e):
+            self.retry(countdown=5)  # 5 秒后重试
         return {"error": str(e)}
