@@ -11,6 +11,12 @@ load_dotenv()
 # 初始化 Celery
 app = Celery('tasks', broker=os.getenv("CELERY_BROKER_URL"))
 
+# 配置 Celery
+app.conf.update(
+    broker_connection_retry=True,  # 显式启用重试
+    broker_connection_max_retries=3,  # 最大重试次数
+)
+
 # 加载 AWS 配置
 s3_client = boto3.client(
     "s3",
