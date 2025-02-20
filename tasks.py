@@ -29,6 +29,9 @@ s3_client = boto3.client(
 @app.task(bind=True, max_retries=3)
 def process_youtube_video(self, youtube_url, output_format="mp3"):
     try:
+        # 添加延迟以减少请求频率
+        sleep(2)
+
         # 下载视频
         yt = YouTube(youtube_url)
         video_stream = yt.streams.filter(only_audio=True).first()
@@ -58,4 +61,5 @@ def process_youtube_video(self, youtube_url, output_format="mp3"):
         # 捕获 HTTP 429 错误并重试
         if "HTTP Error 429" in str(e):
             self.retry(countdown=5)  # 5 秒后重试
+        # 返回可序列化的错误信息
         return {"error": str(e)}

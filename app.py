@@ -9,13 +9,6 @@ load_dotenv()
 # 初始化 Flask
 app = Flask(__name__)
 
-# ====================
-# 路由：主页（默认根路径）
-# ====================
-@app.route("/")
-def index():
-    return "Welcome to the YouTube to Audio Converter!"
-
 # 加载或生成 API 秘钥
 API_KEYS_FILE = "/tmp/api_keys.txt"  # Render 使用临时存储
 if not os.path.exists(API_KEYS_FILE):
@@ -23,6 +16,13 @@ if not os.path.exists(API_KEYS_FILE):
         f.write("default-key\n")  # 默认秘钥
 with open(API_KEYS_FILE, "r") as f:
     API_KEYS = set(line.strip() for line in f if line.strip())
+
+# ====================
+# 路由：主页（默认根路径）
+# ====================
+@app.route("/")
+def index():
+    return "Welcome to the YouTube to Audio Converter!"
 
 # ====================
 # 路由：API 秘钥管理
@@ -84,11 +84,17 @@ def task_status(task_id):
     try:
         task = process_youtube_video.AsyncResult(task_id)
         if task.ready():
-            return jsonify(task.result), 200
+            # 确保任务结果是 JSON 可序列化的
+            result = task.result
+            if isinstance(result, dict):  # 如果结果是字典，直接返回
+                return jsonify(result), 200
+            else:  # 如果结果不是字典，将其转换为字符串
+                return jsonify({"message": str(result)}), 200
         else:
             return jsonify({"message": "任务仍在处理中"}), 202
     except Exception as e:
-        return jsonify({"error": f"查询任务状态失败: {str(e)}"}), 500
+        # 捕获所有异常并返回可序列化的错误信息
+        return jsonify({"error": str(e)}), 500
 
 
 # ====================
