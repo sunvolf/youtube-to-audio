@@ -4,28 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>API 秘钥管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>API 秘钥管理</h1>
+    <div class="container">
+        <h1>API 秘钥管理</h1>
 
-    <h2>生成新秘钥</h2>
-    <form method="POST">
-        <input type="hidden" name="action" value="generate" />
-        <button type="submit">生成新秘钥</button>
-    </form>
+        <h2>生成新秘钥</h2>
+        <form method="POST" class="form">
+            <input type="hidden" name="action" value="generate" />
+            <button type="submit" class="btn btn-primary">生成新秘钥</button>
+        </form>
 
-    <h2>现有秘钥</h2>
-    <ul>
-        {% for key in api_keys %}
-        <li>
-            {{ key }}
-            <form method="POST" style="display:inline;">
-                <input type="hidden" name="action" value="delete" />
-                <input type="hidden" name="key" value="{{ key }}" />
-                <button type="submit">删除</button>
-            </form>
-        </li>
-        {% endfor %}
-    </ul>
+        <h2>现有秘钥</h2>
+        <ul class="key-list">
+            {% for key in api_keys %}
+            <li class="key-item">
+                <span class="key">{{ key }}</span>
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="action" value="delete" />
+                    <input type="hidden" name="key" value="{{ key }}" />
+                    <button type="submit" class="btn btn-danger">删除</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
 </body>
 </html>
