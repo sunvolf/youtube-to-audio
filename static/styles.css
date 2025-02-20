@@ -1,0 +1,172 @@
+/* 基础样式重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* 管理后台容器 */
+.admin-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* 头部样式 */
+.admin-header {
+    text-align: center;
+    padding-bottom: 2rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid #f0f2f5;
+}
+
+.admin-header h1 {
+    color: #2c3e50;
+    font-size: 2.4rem;
+    margin-bottom: 1.2rem;
+}
+
+/* 导航菜单 */
+nav {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+}
+
+nav a {
+    color: #6c757d;
+    text-decoration: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+nav a:hover {
+    background: #f8f9fa;
+}
+
+.nav-active {
+    background: #4a90e2;
+    color: white !important;
+}
+
+/* 主内容区域 */
+.admin-main {
+    margin-top: 2rem;
+}
+
+/* 密钥生成区域 */
+.key-generation {
+    background: #f8f9fa;
+    padding: 2rem;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+}
+
+.key-generation h2 {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+}
+
+.btn {
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: transform 0.2s, opacity 0.3s;
+}
+
+.btn-generate {
+    background: #4a90e2;
+    color: white;
+}
+
+.btn-generate:hover {
+    transform: translateY(-2px);
+}
+
+/* 密钥列表样式 */
+.key-list-section {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.key-list {
+    margin-top: 1.5rem;
+}
+
+.key-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    background: #f8f9fa;
+    border-radius: 8px;
+    transition: box-shadow 0.3s;
+}
+
+.key-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.key-info {
+    flex: 1;
+    margin-right: 2rem;
+}
+
+.key-value {
+    display: block;
+    font-family: 'SF Mono', Menlo, monospace;
+    color: #2c3e50;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+}
+
+.key-expiry {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.btn-revoke {
+    background: #ff6b6b;
+    color: white;
+    padding: 0.8rem 1.5rem;
+}
+
+.btn-revoke:hover {
+    background: #ff5252;
+}
+
+/* 空状态提示 */
+.empty-state {
+    text-align: center;
+    color: #6c757d;
+    padding: 3rem;
+    border: 2px dashed #e9ecef;
+    border-radius: 10px;
+    margin-top: 2rem;
+}
+
+/* 页脚样式 */
+.admin-footer {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    text-align: center;
+    color: #6c757d;
+    border-top: 2px solid #f0f2f5;
+}
+
+.status-indicator {
+    color: #38c172;
+    font-weight: 500;
+}

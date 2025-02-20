@@ -7,8 +7,8 @@ import boto3
 from botocore.exceptions import ClientError
 import redis
 from dotenv import load_dotenv
-from time import sleep
 import random
+from time import sleep
 
 load_dotenv()
 
@@ -52,44 +52,45 @@ def process_youtube_video(self, youtube_url, output_format):
         yt = YouTube(youtube_url)
         video_id = yt.video_id
         
-        # 检查缓存
+        # Redis缓存检查
         if cached_url := redis_client.get(video_id):
             return {'file_url': cached_url.decode(), 'cached': True}
         
-        # 随机化请求特征
+        # 反检测策略
         yt._user_agent = random.choice([
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36...'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ])
-        sleep(random.uniform(1, 5))
-        
+        sleep(random.uniform(1, 3))  # 随机延迟
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 下载音频
-            self.update_state(state='PROGRESS', meta={'status': '下载中...'})
-            stream = yt.streams.filter(only_audio=True).first()
-            mp4_path = f'{tmpdir}/{video_id}.mp4'
-            stream.download(output_path=tmpdir, filename=f'{video_id}.mp4')
-            
-            # 转换格式
-            self.update_state(state='PROGRESS', meta={'status': '转换中...'})
-            audio_path = f'{tmpdir}/{video_id}.{output_format}'
+            # 下载音频流
+            self.update_state(state='PROGRESS', meta={'progress': 30, 'status': '下载中...'})
+            stream = yt.streams.filter(only_audio=True).order_by('abr').last()
+            mp4_path = os.path.join(tmpdir, f'{video_id}.mp4')
+            stream.download(output_path=tmpdir, filename=os.path.basename(mp4_path), timeout=30)
+
+            # 格式转换
+            self.update_state(state='PROGRESS', meta={'progress': 60, 'status': '转换中...'})
+            audio_path = os.path.join(tmpdir, f'{video_id}.{output_format}')
             codec = 'libmp3lame' if output_format == 'mp3' else 'aac'
             subprocess.run([
                 'ffmpeg', '-y', '-i', mp4_path,
                 '-vn', '-ar', '44100', '-ac', '2',
                 '-codec:a', codec, '-b:a', '192k', audio_path
-            ], check=True)
-            
+            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
             # 上传到S3
-            self.update_state(state='PROGRESS', meta={'status': '上传中...'})
+            self.update_state(state='PROGRESS', meta={'progress': 90, 'status': '上传中...'})
             bucket = os.getenv('S3_BUCKET')
-            s3.upload_file(audio_path, bucket, f'{video_id}.{output_format}')
-            file_url = generate_presigned_url(bucket, f'{video_id}.{output_format}')
-            
+            s3_key = f'audio/{video_id}.{output_format}'
+            s3.upload_file(audio_path, bucket, s3_key)
+            presigned_url = generate_presigned_url(bucket, s3_key)
+
             # 更新缓存
-            redis_client.setex(video_id, 86400, file_url)
-            return {'file_url': file_url}
-            
+            redis_client.setex(video_id, 86400, presigned_url)  # 24小时缓存
+            return {'file_url': presigned_url}
+
     except Exception as e:
         if 'HTTP Error 403' in str(e):
             self.retry(countdown=2 ** self.request.retries)

@@ -1,39 +1,61 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API 秘钥管理</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>API密钥管理 - Render版</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1>API 秘钥管理</h1>
+    <div class="admin-container">
+        <header class="admin-header">
+            <h1>🔑 YouTube音频转换服务管理后台</h1>
+            <nav>
+                <a href="/admin" class="nav-active">密钥管理</a>
+                <a href="/">API文档</a>
+            </nav>
+        </header>
 
-        <h2>生成新秘钥</h2>
-        <form method="POST" class="form">
-            <input type="hidden" name="action" value="generate" />
-            <button type="submit" class="btn btn-primary">生成新秘钥</button>
-        </form>
-
-        <h2>现有秘钥</h2>
-        {% if api_keys %}
-        <ul class="key-list">
-            {% for key, expiry_time in api_keys %}
-            <li class="key-item">
-                <span class="key">{{ key }}</span>
-                <span class="expiry-time">(有效至: {{ expiry_time.strftime("%Y-%m-%d %H:%M:%S") }})</span>
-                <form method="POST" style="display:inline;">
-                    <input type="hidden" name="action" value="delete" />
-                    <input type="hidden" name="key" value="{{ key }}" />
-                    <button type="submit" class="btn btn-danger">删除</button>
+        <main class="admin-main">
+            <section class="key-generation">
+                <h2>🔄 生成新密钥</h2>
+                <form method="POST">
+                    <input type="hidden" name="action" value="generate">
+                    <button type="submit" class="btn btn-generate">
+                        🎯 生成API密钥（有效期180天）
+                    </button>
                 </form>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p>暂无可用秘钥。</p>
-        {% endif %}
+            </section>
+
+            <section class="key-list-section">
+                <h2>📜 有效密钥列表</h2>
+                {% if api_keys %}
+                <div class="key-list">
+                    {% for key in api_keys %}
+                    <div class="key-item">
+                        <div class="key-info">
+                            <code class="key-value">{{ key.key }}</code>
+                            <span class="key-expiry">过期时间：{{ key.expiry_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                        </div>
+                        <form method="POST" onsubmit="return confirm('确定要永久撤销该密钥吗？')">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="key" value="{{ key.key }}">
+                            <button type="submit" class="btn btn-revoke">🗑️ 撤销</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    ⚠️ 当前没有有效密钥
+                </div>
+                {% endif %}
+            </section>
+        </main>
+
+        <footer class="admin-footer">
+            <p>Powered by Render PostgreSQL | 服务状态：<span class="status-indicator">● 运行正常</span></p>
+        </footer>
     </div>
 </body>
 </html>

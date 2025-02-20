@@ -13,8 +13,8 @@ load_dotenv()
 app = Flask(__name__)
 auth = HTTPBasicAuth()
 
-# 数据库配置
-def get_db_connection():
+# PostgreSQL 连接
+def get_db():
     return psycopg2.connect(
         dbname=os.getenv('PGDATABASE'),
         user=os.getenv('PGUSER'),
@@ -26,18 +26,17 @@ def get_db_connection():
 
 # 初始化数据库表
 def init_db():
-    conn = get_db_connection()
-    with conn.cursor() as cur:
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS api_keys (
-                id SERIAL PRIMARY KEY,
-                key VARCHAR(36) UNIQUE NOT NULL,
-                expiry_time TIMESTAMPTZ NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        ''')
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR(36) UNIQUE NOT NULL,
+                    expiry_time TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ''')
+        conn.commit()
 
 # 身份验证
 ADMIN_USER = os.getenv('ADMIN_USER')
@@ -49,13 +48,12 @@ def verify_password(username, password):
 
 @app.route('/')
 def index():
-    return "YouTube音频转换服务 - 访问 /admin 进行管理"
+    return "YouTube音频转换服务 - 访问 /admin 管理API密钥"
 
 @app.route('/admin', methods=['GET', 'POST'])
 @auth.login_required
 def admin():
-    conn = get_db_connection()
-    
+    conn = get_db()
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'generate':
@@ -66,40 +64,40 @@ def admin():
                     'INSERT INTO api_keys (key, expiry_time) VALUES (%s, %s)',
                     (new_key, expiry)
                 )
+            conn.commit()
         elif action == 'delete':
             key = request.form.get('key')
             with conn.cursor() as cur:
                 cur.execute('DELETE FROM api_keys WHERE key = %s', (key,))
-        conn.commit()
+            conn.commit()
         return redirect(url_for('admin'))
     
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute('SELECT key, expiry_time FROM api_keys WHERE expiry_time > NOW()')
         keys = cur.fetchall()
-    
     conn.close()
     return render_template('admin.html', api_keys=keys)
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    # 验证API密钥
-    auth_header = request.headers.get('Authorization')
-    conn = get_db_connection()
-    with conn.cursor() as cur:
-        cur.execute('SELECT key FROM api_keys WHERE key = %s AND expiry_time > NOW()', (auth_header,))
-        if not cur.fetchone():
-            return jsonify({'error': '无效的API密钥'}), 401
-    
-    # 验证输入
+    # API密钥验证
+    api_key = request.headers.get('Authorization')
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT 1 FROM api_keys WHERE key = %s AND expiry_time > NOW()', (api_key,))
+            if not cur.fetchone():
+                return jsonify({'error': '无效或过期的API密钥'}), 401
+
+    # 输入验证
     data = request.json
     youtube_url = data.get('youtube_url')
     if not youtube_url or not re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+', youtube_url):
-        return jsonify({'error': '无效的YouTube链接'}), 400
+        return jsonify({'error': '无效的YouTube URL'}), 400
     
     output_format = data.get('output_format', 'mp3').lower()
     if output_format not in ['mp3', 'm4a']:
-        return jsonify({'error': '仅支持mp3/m4a格式'}), 400
-    
+        return jsonify({'error': '仅支持 mp3/m4a 格式'}), 400
+
     # 提交任务
     from tasks import process_youtube_video
     task = process_youtube_video.delay(youtube_url, output_format)
@@ -108,16 +106,17 @@ def convert():
         'status_url': f'/status/{task.id}'
     }), 202
 
-@app.route('/status/<task_id>', methods=['GET'])
-def task_status(task_id):
+@app.route('/status/<task_id>')
+def get_status(task_id):
     from tasks import process_youtube_video
     task = process_youtube_video.AsyncResult(task_id)
     return jsonify({
-        'task_id': task_id,
+        'task_id': task.id,
         'status': task.state,
-        'result': task.result if task.ready() else None
+        'result': task.result if task.ready() else None,
+        'progress': task.info.get('progress') if task.info else None
     })
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
+    app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
