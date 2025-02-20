@@ -39,8 +39,9 @@ def process_youtube_video(self, youtube_url, output_format="mp3"):
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         ]
-        YouTube(youtube_url).streams.first()  # 触发 pytube 初始化
-        YouTube._user_agent = random.choice(user_agents)
+
+        yt = YouTube(youtube_url)
+        yt._user_agent = random.choice(user_agents)
 
         # 动态延迟 1-8 秒
         sleep(random.uniform(1, 8))
@@ -49,7 +50,6 @@ def process_youtube_video(self, youtube_url, output_format="mp3"):
         self.update_state(state="PROGRESS", meta={"status": "正在下载视频..."})
 
         # 下载视频
-        yt = YouTube(youtube_url)
         video_stream = yt.streams.filter(only_audio=True).first()
         download_path = f"/tmp/{yt.video_id}.mp4"
         video_stream.download(output_path="/tmp", filename=yt.video_id + ".mp4")
