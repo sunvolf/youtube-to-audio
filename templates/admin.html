@@ -17,10 +17,12 @@
         </form>
 
         <h2>现有秘钥</h2>
+        {% if api_keys %}
         <ul class="key-list">
-            {% for key in api_keys %}
+            {% for key, expiry_time in api_keys %}
             <li class="key-item">
                 <span class="key">{{ key }}</span>
+                <span class="expiry-time">(有效至: {{ expiry_time.strftime("%Y-%m-%d %H:%M:%S") }})</span>
                 <form method="POST" style="display:inline;">
                     <input type="hidden" name="action" value="delete" />
                     <input type="hidden" name="key" value="{{ key }}" />
@@ -29,6 +31,9 @@
             </li>
             {% endfor %}
         </ul>
+        {% else %}
+        <p>暂无可用秘钥。</p>
+        {% endif %}
     </div>
 </body>
 </html>

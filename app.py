@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for
 import os
 import uuid
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 # 加载 .env 文件
 load_dotenv()
@@ -9,13 +10,28 @@ load_dotenv()
 # 初始化 Flask
 app = Flask(__name__)
 
-# 加载或生成 API 秘钥
+# 定义 API 秘钥文件路径
 API_KEYS_FILE = "/tmp/api_keys.txt"  # Render 使用临时存储
-if not os.path.exists(API_KEYS_FILE):
+
+# 加载或生成 API 秘钥
+def load_api_keys():
+    if not os.path.exists(API_KEYS_FILE):
+        with open(API_KEYS_FILE, "w") as f:
+            f.write("default-key\n")  # 默认秘钥
+    with open(API_KEYS_FILE, "r") as f:
+        api_keys = []
+        for line in f:
+            parts = line.strip().split("|")
+            if len(parts) == 2:  # 格式：key|expiry_time
+                key, expiry_time = parts
+                if datetime.strptime(expiry_time, "%Y-%m-%d %H:%M:%S") > datetime.now():
+                    api_keys.append(key)
+    return set(api_keys)
+
+def save_api_keys(api_keys):
     with open(API_KEYS_FILE, "w") as f:
-        f.write("default-key\n")  # 默认秘钥
-with open(API_KEYS_FILE, "r") as f:
-    API_KEYS = set(line.strip() for line in f if line.strip())
+        for key, expiry_time in api_keys.items():
+            f.write(f"{key}|{expiry_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
 # ====================
 # 路由：主页（默认根路径）
@@ -32,21 +48,23 @@ def index():
 def admin():
     if request.method == "POST":
         action = request.form.get("action")
+        api_keys = load_api_keys()
         if action == "generate":
             new_key = str(uuid.uuid4())
-            API_KEYS.add(new_key)
-            with open(API_KEYS_FILE, "a") as f:
-                f.write(new_key + "\n")
+            expiry_time = datetime.now() + timedelta(days=7)  # 设置有效期为 7 天
+            api_keys.add((new_key, expiry_time))
+            save_api_keys({key: expiry_time for key, expiry_time in api_keys})
             return redirect(url_for("admin"))
         elif action == "delete":
             key_to_delete = request.form.get("key")
-            if key_to_delete in API_KEYS:
-                API_KEYS.remove(key_to_delete)
-                with open(API_KEYS_FILE, "w") as f:
-                    f.writelines(key + "\n" for key in API_KEYS)
+            api_keys = {(key, expiry_time) for key, expiry_time in api_keys if key != key_to_delete}
+            save_api_keys({key: expiry_time for key, expiry_time in api_keys})
             return redirect(url_for("admin"))
 
-    return render_template("admin.html", api_keys=API_KEYS)
+    # 过滤掉默认秘钥
+    api_keys = load_api_keys()
+    filtered_keys = [(key, expiry_time) for key, expiry_time in api_keys if key != "default-key"]
+    return render_template("admin.html", api_keys=filtered_keys)
 
 
 # ====================
@@ -58,7 +76,9 @@ def convert():
     """接收 POST 请求，提交异步任务"""
     # 验证 Authorization 头部
     auth_header = request.headers.get("Authorization")
-    if not auth_header or auth_header not in API_KEYS:
+    api_keys = load_api_keys()
+    valid_keys = {key for key, _ in api_keys}
+    if not auth_header or auth_header not in valid_keys:
         return jsonify({"error": "无效的 API 秘钥"}), 401
 
     data = request.json
@@ -84,7 +104,6 @@ def task_status(task_id):
     try:
         task = process_youtube_video.AsyncResult(task_id)
         if task.ready():
-            # 确保任务结果是 JSON 可序列化的
             result = task.result
             if isinstance(result, dict):  # 如果结果是字典，直接返回
                 return jsonify(result), 200
@@ -93,7 +112,6 @@ def task_status(task_id):
         else:
             return jsonify({"message": "任务仍在处理中"}), 202
     except Exception as e:
-        # 捕获所有异常并返回可序列化的错误信息
         return jsonify({"error": str(e)}), 500
 
 
