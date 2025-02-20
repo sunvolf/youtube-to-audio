@@ -6,6 +6,7 @@ import boto3
 from dotenv import load_dotenv
 from time import sleep
 import random
+import traceback
 
 # 加载 .env 文件
 load_dotenv()
@@ -81,8 +82,10 @@ def process_youtube_video(self, youtube_url, output_format="mp3"):
         self.update_state(state="SUCCESS", meta={"status": "任务完成", "file_url": file_url})
         return {"message": "转换成功", "file_url": file_url}
     except Exception as e:
-        # 捕获 HTTP 403 错误并重试
-        if "HTTP Error 403" in str(e):
-            self.retry(countdown=5)  # 5 秒后重试
+        # 记录详细错误日志
+        error_message = f"Error processing task: {str(e)}"
+        print(error_message)
+        traceback.print_exc()
+
         # 返回可序列化的错误信息
-        return {"error": str(e)}
+        return {"error": error_message}

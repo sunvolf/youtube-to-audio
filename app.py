@@ -120,8 +120,11 @@ def task_status(task_id):
             return jsonify({"message": task.info.get("status")}), 202
         elif task.state == "SUCCESS":
             return jsonify(task.info), 200
+        elif task.state == "FAILURE":
+            # 返回具体的错误信息
+            return jsonify({"error": task.result.get("error", "未知错误")}), 500
         else:
-            return jsonify({"error": "任务失败"}), 500
+            return jsonify({"error": "任务状态未知"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
