@@ -1,9 +1,14 @@
+# Infrastructure as Code 配置版本
 services:
   - type: web
     name: youtube-converter-web
     runtime: python
-    buildCommand: |
-      sudo apt-get update && sudo apt-get install -y ffmpeg
+    plan: free  # 生产环境建议升级至starter
+    buildCommand: |-
+      curl -sLO https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+      tar xf ffmpeg-release-amd64-static.tar.xz
+      mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/
+      mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/
       pip install -r requirements.txt
       python -c "from app import init_db; init_db()"
     startCommand: gunicorn app:app -k gevent -b 0.0.0.0:$PORT
@@ -25,10 +30,10 @@ services:
           name: youtube-converter-db
           property: internalHost
       - key: PGPORT
-        value: 5432
+        fromDatabase:
+          name: youtube-converter-db
+          property: port
       - key: REDIS_URL
-        value: >
-          rediss://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}?ssl_cert_reqs=CERT_NONE
         fromService:
           type: redis
           name: youtube-converter-redis
@@ -47,14 +52,16 @@ services:
   - type: worker
     name: celery-worker
     runtime: python
-    buildCommand: |
-      sudo apt-get update && sudo apt-get install -y ffmpeg
+    plan: free
+    buildCommand: |-
+      curl -sLO https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+      tar xf ffmpeg-release-amd64-static.tar.xz
+      mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/
+      mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/
       pip install -r requirements.txt
-    startCommand: celery -A tasks worker --loglevel=info
+    startCommand: celery -A tasks worker --loglevel=info --concurrency=2
     envVars:
       - key: REDIS_URL
-        value: >
-          rediss://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}?ssl_cert_reqs=CERT_NONE
         fromService:
           type: redis
           name: youtube-converter-redis

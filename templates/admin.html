@@ -1,61 +1,99 @@
 <!DOCTYPE html>
+<!-- 管理员控制台模板 -->
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API密钥管理 - Render版</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <title>API密钥管理系统</title>
+    <style>
+        /* 响应式表格样式 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #dddddd;
+        }
+        
+        th {
+            background-color: #009879;
+            color: white;
+            text-transform: uppercase;
+        }
+        
+        tr:nth-of-type(even) {
+            background-color: #f3f3f3;
+        }
+        
+        button {
+            background-color: #009879;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #007f63;
+        }
+    </style>
 </head>
 <body>
-    <div class="admin-container">
-        <header class="admin-header">
-            <h1>🔑 YouTube音频转换服务管理后台</h1>
-            <nav>
-                <a href="/admin" class="nav-active">密钥管理</a>
-                <a href="/">API文档</a>
-            </nav>
-        </header>
+    <h1>API密钥管理控制台</h1>
+    
+    <!-- 密钥生成区 -->
+    <section>
+        <h2>密钥操作</h2>
+        <form method="post">
+            <button type="submit" name="action" value="generate">
+                🗝️ 生成新密钥（180天有效期）
+            </button>
+        </form>
+    </section>
 
-        <main class="admin-main">
-            <section class="key-generation">
-                <h2>🔄 生成新密钥</h2>
-                <form method="POST">
-                    <input type="hidden" name="action" value="generate">
-                    <button type="submit" class="btn btn-generate">
-                        🎯 生成API密钥（有效期180天）
-                    </button>
-                </form>
-            </section>
-
-            <section class="key-list-section">
-                <h2>📜 有效密钥列表</h2>
-                {% if api_keys %}
-                <div class="key-list">
-                    {% for key in api_keys %}
-                    <div class="key-item">
-                        <div class="key-info">
-                            <code class="key-value">{{ key.key }}</code>
-                            <span class="key-expiry">过期时间：{{ key.expiry_time.strftime('%Y-%m-%d %H:%M') }}</span>
-                        </div>
-                        <form method="POST" onsubmit="return confirm('确定要永久撤销该密钥吗？')">
-                            <input type="hidden" name="action" value="delete">
+    <!-- 密钥列表区 -->
+    <section>
+        <h2>已颁发密钥</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>API密钥</th>
+                    <th>过期时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in api_keys %}
+                <tr>
+                    <td><code>{{ key.key }}</code></td>
+                    <td>{{ key.expiry_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <form method="post">
                             <input type="hidden" name="key" value="{{ key.key }}">
-                            <button type="submit" class="btn btn-revoke">🗑️ 撤销</button>
+                            <button type="submit" name="action" value="delete">
+                                🗑️ 立即吊销
+                            </button>
                         </form>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="empty-state">
-                    ⚠️ 当前没有有效密钥
-                </div>
-                {% endif %}
-            </section>
-        </main>
-
-        <footer class="admin-footer">
-            <p>Powered by Render PostgreSQL | 服务状态：<span class="status-indicator">● 运行正常</span></p>
-        </footer>
-    </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
 </body>
 </html>

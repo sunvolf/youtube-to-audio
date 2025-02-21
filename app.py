@@ -1,3 +1,8 @@
+"""
+YouTube音频转换服务 - 主程序
+整合Web服务器与Celery Worker功能
+"""
+
 import os
 import uuid
 import re
@@ -6,83 +11,80 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_httpauth import HTTPBasicAuth
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 auth = HTTPBasicAuth()
 
-# PostgreSQL 连接
-def get_db():
-    return psycopg2.connect(
+# 数据库初始化函数
+def init_db():
+    """初始化数据库表结构（如果不存在）"""
+    with psycopg2.connect(
         dbname=os.getenv('PGDATABASE'),
         user=os.getenv('PGUSER'),
         password=os.getenv('PGPASSWORD'),
         host=os.getenv('PGHOST'),
         port=os.getenv('PGPORT'),
-        sslmode='require'
-    )
-
-# 初始化数据库表
-def init_db():
-    with get_db() as conn:
+        sslmode='prefer'
+    ) as conn:
         with conn.cursor() as cur:
+            # 创建API密钥表
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS api_keys (
                     id SERIAL PRIMARY KEY,
                     key VARCHAR(36) UNIQUE NOT NULL,
-                    expiry_time TIMESTAMPTZ NOT NULL,
-                    created_at TIMESTAMPTZ DEFAULT NOW()
+                    expiry_time TIMESTAMPTZ NOT NULL
                 )
             ''')
+            # 创建任务记录表
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS conversions (
                     id SERIAL PRIMARY KEY,
                     task_id VARCHAR(255) UNIQUE NOT NULL,
-                    youtube_id VARCHAR(255) NOT NULL,
+                    youtube_id VARCHAR(11) NOT NULL,
                     status VARCHAR(50) DEFAULT 'pending',
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    completed_at TIMESTAMPTZ
+                    created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
-        conn.commit()
-
-# 身份验证
-ADMIN_USER = os.getenv('ADMIN_USER')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
+            conn.commit()
 
 @auth.verify_password
 def verify_password(username, password):
-    return username == ADMIN_USER and password == ADMIN_PASSWORD
+    """管理员界面身份验证"""
+    return username == os.getenv('ADMIN_USER') and password == os.getenv('ADMIN_PASSWORD')
 
 @app.route('/')
 def index():
+    """服务主页"""
     return "YouTube音频转换服务 - 访问 /admin 管理API密钥"
 
 @app.route('/admin', methods=['GET', 'POST'])
 @auth.login_required
 def admin():
+    """API密钥管理界面"""
     if request.method == 'POST':
         action = request.form.get('action')
-        with get_db() as conn:
-            if action == 'generate':
-                new_key = str(uuid.uuid4())
-                expiry = datetime.now() + timedelta(days=180)
+        if action == 'generate':
+            # 生成有效期180天的新密钥
+            new_key = str(uuid.uuid4())
+            expiry = datetime.now() + timedelta(days=180)
+            with psycopg2.connect(os.getenv('DATABASE_URL')) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         'INSERT INTO api_keys (key, expiry_time) VALUES (%s, %s)',
                         (new_key, expiry)
                     )
                 conn.commit()
-            elif action == 'delete':
-                key = request.form.get('key')
+        elif action == 'delete':
+            # 删除指定密钥
+            key = request.form.get('key')
+            with psycopg2.connect(os.getenv('DATABASE_URL')) as conn:
                 with conn.cursor() as cur:
                     cur.execute('DELETE FROM api_keys WHERE key = %s', (key,))
                 conn.commit()
         return redirect(url_for('admin'))
     
-    with get_db() as conn:
+    # 获取当前有效密钥列表
+    with psycopg2.connect(os.getenv('DATABASE_URL')) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute('SELECT key, expiry_time FROM api_keys WHERE expiry_time > NOW()')
             keys = cur.fetchall()
@@ -90,27 +92,26 @@ def admin():
 
 @app.route('/convert', methods=['POST'])
 def convert():
+    """提交视频转换任务"""
+    # API密钥验证
     api_key = request.headers.get('Authorization', '').replace('Bearer ', '').strip()
     if not api_key:
-        return jsonify({'error': '缺少授权头'}), 401
+        return jsonify({'error': 'Missing API key'}), 401
     
-    with get_db() as conn:
+    with psycopg2.connect(os.getenv('DATABASE_URL')) as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT 1 FROM api_keys WHERE key = %s AND expiry_time > NOW()', (api_key,))
             if not cur.fetchone():
-                return jsonify({'error': '无效或过期的API密钥'}), 401
+                return jsonify({'error': 'Invalid or expired API key'}), 401
 
-    data = request.json
-    youtube_url = data.get('youtube_url')
-    if not youtube_url or not re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+', youtube_url):
-        return jsonify({'error': '无效的YouTube URL'}), 400
-    
-    output_format = data.get('output_format', 'mp3').lower()
-    if output_format not in ['mp3', 'm4a']:
-        return jsonify({'error': '仅支持 mp3/m4a 格式'}), 400
+    # URL格式校验
+    youtube_url = request.json.get('youtube_url')
+    if not re.match(r'^https?://(www\.)?(youtube\.com|youtu\.be)/', youtube_url):
+        return jsonify({'error': 'Invalid YouTube URL'}), 400
 
-    from tasks import process_youtube_video
-    task = process_youtube_video.delay(youtube_url, output_format)
+    # 提交异步任务
+    from tasks import process_video
+    task = process_video.delay(youtube_url)
     return jsonify({
         'task_id': task.id,
         'status_url': f'/status/{task.id}'
@@ -118,15 +119,16 @@ def convert():
 
 @app.route('/status/<task_id>')
 def get_status(task_id):
-    from tasks import process_youtube_video
-    task = process_youtube_video.AsyncResult(task_id)
+    """查询任务状态"""
+    from tasks import process_video
+    task = process_video.AsyncResult(task_id)
     return jsonify({
         'task_id': task.id,
         'status': task.state,
-        'result': task.result if task.ready() else None,
-        'progress': task.info.get('progress') if task.info else None
+        'result': task.result if task.ready() else None
     })
 
 if __name__ == '__main__':
+    # 启动时初始化数据库并运行服务
     init_db()
     app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
