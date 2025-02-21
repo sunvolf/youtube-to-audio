@@ -1,99 +1,72 @@
 <!DOCTYPE html>
-<!-- 管理员控制台模板 -->
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>API密钥管理系统</title>
-    <style>
-        /* 响应式表格样式 */
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            max-width: 1200px;
-            margin: 20px auto;
-            padding: 0 20px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 25px 0;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
-        }
-        
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #dddddd;
-        }
-        
-        th {
-            background-color: #009879;
-            color: white;
-            text-transform: uppercase;
-        }
-        
-        tr:nth-of-type(even) {
-            background-color: #f3f3f3;
-        }
-        
-        button {
-            background-color: #009879;
-            color: white;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        
-        button:hover {
-            background-color: #007f63;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>API密钥管理控制台</h1>
-    
-    <!-- 密钥生成区 -->
-    <section>
-        <h2>密钥操作</h2>
-        <form method="post">
-            <button type="submit" name="action" value="generate">
-                🗝️ 生成新密钥（180天有效期）
-            </button>
-        </form>
-    </section>
+    <div class="admin-container">
+        <header class="admin-header">
+            <h1>API密钥管理控制台</h1>
+        </header>
 
-    <!-- 密钥列表区 -->
-    <section>
-        <h2>已颁发密钥</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>API密钥</th>
-                    <th>过期时间</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for key in api_keys %}
-                <tr>
-                    <td><code>{{ key.key }}</code></td>
-                    <td>{{ key.expiry_time.strftime('%Y-%m-%d %H:%M') }}</td>
-                    <td>
-                        <form method="post">
-                            <input type="hidden" name="key" value="{{ key.key }}">
-                            <button type="submit" name="action" value="delete">
-                                🗑️ 立即吊销
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </section>
+        <nav>
+            <a href="#" class="nav-active">API密钥管理</a>
+        </nav>
+
+        <main class="admin-main">
+            <!-- 密钥生成区 -->
+            <section class="key-generation">
+                <h2>密钥操作</h2>
+                <form method="post">
+                    <button type="submit" name="action" value="generate" class="btn btn-generate">
+                        🗝️ 生成新密钥（180天有效期）
+                    </button>
+                </form>
+            </section>
+
+            <!-- 密钥列表区 -->
+            <section class="key-list-section">
+                <h2>已颁发密钥</h2>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>API密钥</th>
+                            <th>过期时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if api_keys %}
+                        {% for key in api_keys %}
+                        <tr>
+                            <td><code>{{ key.key }}</code></td>
+                            <td>{{ key.expiry_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                <form method="post">
+                                    <input type="hidden" name="key" value="{{ key.key }}">
+                                    <button type="submit" name="action" value="delete" class="btn btn-revoke">
+                                        🗑️ 立即吊销
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="empty-state">暂无已颁发密钥</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </section>
+        </main>
+
+        <footer class="admin-footer">
+            <p>&copy; 2023 API密钥管理系统</p>
+        </footer>
+    </div>
 </body>
 </html>

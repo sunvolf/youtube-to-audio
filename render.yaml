@@ -1,16 +1,12 @@
-# Infrastructure as Code 配置版本
 services:
   - type: web
     name: youtube-converter-web
     runtime: python
     plan: free  # 生产环境建议升级至starter
     buildCommand: |-
-      curl -sLO https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
-      tar xf ffmpeg-release-amd64-static.tar.xz
-      mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/
-      mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/
+      apt-get update && apt-get install -y ffmpeg
       pip install -r requirements.txt
-      python -c "from app import init_db; init_db()"
+      python -c "from init_db import init_db; init_db()"
     startCommand: gunicorn app:app -k gevent -b 0.0.0.0:$PORT
     envVars:
       - key: PGDATABASE
@@ -48,16 +44,12 @@ services:
         fromSecret: admin_user
       - key: ADMIN_PASSWORD
         fromSecret: admin_password
-
   - type: worker
     name: celery-worker
     runtime: python
     plan: free
     buildCommand: |-
-      curl -sLO https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
-      tar xf ffmpeg-release-amd64-static.tar.xz
-      mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/
-      mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/
+      apt-get update && apt-get install -y ffmpeg
       pip install -r requirements.txt
     startCommand: celery -A tasks worker --loglevel=info --concurrency=2
     envVars:
@@ -72,13 +64,11 @@ services:
         fromSecret: aws_secret_access_key
       - key: S3_BUCKET
         fromSecret: s3_bucket
-
 databases:
   - name: youtube-converter-db
     databaseName: youtube_conv
     user: yt_admin
     plan: free
-
 redis:
   - name: youtube-converter-redis
     plan: free
