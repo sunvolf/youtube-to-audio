@@ -1,23 +1,18 @@
-# Web框架
+# Web 服务器核心依赖
 Flask==3.0.0
+gunicorn==21.2.0       # 新增：缺少的Web服务器
+gevent==23.9.1         # 协程支持
 
 # 异步任务处理
-celery==5.3.4
+celery==5.3.4          # 必须明确指定（注意拼写正确性）
 
-# PostgreSQL驱动
-psycopg2-binary==2.9.9
+# 数据库支持
+psycopg2-binary==2.9.9 # PostgreSQL驱动
 
-# 协程服务器
-gevent==23.9.1
+# YouTube处理
+pytube==15.0.0         # YouTube下载库
 
-# YouTube下载库
-pytube==15.0.0
-
-# 环境变量管理
-python-dotenv==1.0.0
-
-# 基础认证支持
-flask-httpauth==4.8.0
-
-# Redis连接库
-redis==5.0.1
+# 辅助工具
+python-dotenv==1.0.0   # 环境变量加载
+flask-httpauth==4.8.0  # 基础认证
+redis==5.0.1           # Redis连接
