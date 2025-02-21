@@ -3,6 +3,7 @@ services:
     name: youtube-converter-web
     runtime: python
     buildCommand: |
+      sudo apt-get update && sudo apt-get install -y ffmpeg
       pip install -r requirements.txt
       python -c "from app import init_db; init_db()"
     startCommand: gunicorn app:app -k gevent -b 0.0.0.0:$PORT
@@ -22,44 +23,48 @@ services:
       - key: PGHOST
         fromDatabase:
           name: youtube-converter-db
-          property: host
+          property: internalHost
       - key: PGPORT
-        fromDatabase:
-          name: youtube-converter-db
-          property: port
+        value: 5432
       - key: REDIS_URL
+        value: >
+          rediss://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}?ssl_cert_reqs=CERT_NONE
         fromService:
           type: redis
           name: youtube-converter-redis
           property: connectionString
       - key: AWS_ACCESS_KEY_ID
-        value: your-aws-key
+        fromSecret: aws_access_key_id
       - key: AWS_SECRET_ACCESS_KEY
-        value: your-aws-secret
+        fromSecret: aws_secret_access_key
       - key: S3_BUCKET
-        value: your-bucket-name
+        fromSecret: s3_bucket
       - key: ADMIN_USER
-        value: your-admin-user
+        fromSecret: admin_user
       - key: ADMIN_PASSWORD
-        value: your-admin-password
+        fromSecret: admin_password
 
   - type: worker
     name: celery-worker
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      sudo apt-get update && sudo apt-get install -y ffmpeg
+      pip install -r requirements.txt
     startCommand: celery -A tasks worker --loglevel=info
     envVars:
       - key: REDIS_URL
+        value: >
+          rediss://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}?ssl_cert_reqs=CERT_NONE
         fromService:
           type: redis
           name: youtube-converter-redis
           property: connectionString
       - key: AWS_ACCESS_KEY_ID
-        value: your-aws-key
+        fromSecret: aws_access_key_id
       - key: AWS_SECRET_ACCESS_KEY
-        value: your-aws-secret
+        fromSecret: aws_secret_access_key
       - key: S3_BUCKET
-        value: your-bucket-name
+        fromSecret: s3_bucket
 
 databases:
   - name: youtube-converter-db

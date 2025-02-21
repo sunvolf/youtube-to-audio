@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 auth = HTTPBasicAuth()
 
 # PostgreSQL 连接
@@ -36,6 +36,16 @@ def init_db():
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS conversions (
+                    id SERIAL PRIMARY KEY,
+                    task_id VARCHAR(255) UNIQUE NOT NULL,
+                    youtube_id VARCHAR(255) NOT NULL,
+                    status VARCHAR(50) DEFAULT 'pending',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    completed_at TIMESTAMPTZ
+                )
+            ''')
         conn.commit()
 
 # 身份验证
@@ -53,42 +63,43 @@ def index():
 @app.route('/admin', methods=['GET', 'POST'])
 @auth.login_required
 def admin():
-    conn = get_db()
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'generate':
-            new_key = str(uuid.uuid4())
-            expiry = datetime.now() + timedelta(days=180)
-            with conn.cursor() as cur:
-                cur.execute(
-                    'INSERT INTO api_keys (key, expiry_time) VALUES (%s, %s)',
-                    (new_key, expiry)
-                )
-            conn.commit()
-        elif action == 'delete':
-            key = request.form.get('key')
-            with conn.cursor() as cur:
-                cur.execute('DELETE FROM api_keys WHERE key = %s', (key,))
-            conn.commit()
+        with get_db() as conn:
+            if action == 'generate':
+                new_key = str(uuid.uuid4())
+                expiry = datetime.now() + timedelta(days=180)
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'INSERT INTO api_keys (key, expiry_time) VALUES (%s, %s)',
+                        (new_key, expiry)
+                    )
+                conn.commit()
+            elif action == 'delete':
+                key = request.form.get('key')
+                with conn.cursor() as cur:
+                    cur.execute('DELETE FROM api_keys WHERE key = %s', (key,))
+                conn.commit()
         return redirect(url_for('admin'))
     
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute('SELECT key, expiry_time FROM api_keys WHERE expiry_time > NOW()')
-        keys = cur.fetchall()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute('SELECT key, expiry_time FROM api_keys WHERE expiry_time > NOW()')
+            keys = cur.fetchall()
     return render_template('admin.html', api_keys=keys)
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    # API密钥验证
-    api_key = request.headers.get('Authorization')
+    api_key = request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    if not api_key:
+        return jsonify({'error': '缺少授权头'}), 401
+    
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT 1 FROM api_keys WHERE key = %s AND expiry_time > NOW()', (api_key,))
             if not cur.fetchone():
                 return jsonify({'error': '无效或过期的API密钥'}), 401
 
-    # 输入验证
     data = request.json
     youtube_url = data.get('youtube_url')
     if not youtube_url or not re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+', youtube_url):
@@ -98,7 +109,6 @@ def convert():
     if output_format not in ['mp3', 'm4a']:
         return jsonify({'error': '仅支持 mp3/m4a 格式'}), 400
 
-    # 提交任务
     from tasks import process_youtube_video
     task = process_youtube_video.delay(youtube_url, output_format)
     return jsonify({
