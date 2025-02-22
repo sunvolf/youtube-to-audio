@@ -61,23 +61,25 @@ def process_video(self, youtube_url):
             
             # FFmpeg转换参数
             output_path = os.path.join(tmpdir, f'{video_id}.mp3')
-            subprocess.run([
-                'ffmpeg',
-                '-i', download_path,    # 输入文件
-                '-vn',                  # 禁用视频流
-                '-ar', '44100',         # 采样率44.1kHz（CD标准）
-                '-ac', '2',             # 立体声
-                '-b:a', '192k',         # 音频比特率
-                '-y',                   # 覆盖输出文件（防止报错）
-                output_path
-            ], check=True, timeout=300)  # 设置5分钟超时
+            try:
+                subprocess.run([
+                    'ffmpeg',
+                    '-i', download_path,    # 输入文件
+                    '-vn',                  # 禁用视频流
+                    '-ar', '44100',         # 采样率44.1kHz（CD标准）
+                    '-ac', '2',             # 立体声
+                    '-b:a', '192k',         # 音频比特率
+                    '-y',                   # 覆盖输出文件（防止报错）
+                    output_path
+                ], check=True, timeout=300)  # 设置5分钟超时
+            except subprocess.TimeoutExpired:
+                logging.warning("FFmpeg转换超时，重试中...")
+                self.retry(countdown=min(60 * 2 ** self.request.retries, 3600), exc=Exception('FFmpeg转换超时'))
+                return {'error': 'FFmpeg conversion timed out'}
             
             # 上传到S3并返回URL
             mp3_url = upload_to_s3(output_path, video_id)
             return {'url': mp3_url}
-    except subprocess.TimeoutExpired:
-        logging.warning("FFmpeg转换超时，重试中...")
-        self.retry(countdown=min(60 * 2 ** self.request.retries, 3600), exc=Exception('FFmpeg转换超时'))
     except Exception as e:
         logging.error(f"Error processing video: {e}")
         self.retry(countdown=min(30 * 2 ** self.request.retries, 3600), exc=e)

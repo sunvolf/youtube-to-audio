@@ -8,6 +8,8 @@ import re
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_httpauth import HTTPBasicAuth
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import logging
 
 # 配置日志记录
@@ -17,8 +19,52 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 auth = HTTPBasicAuth()
 
-# 导入数据库初始化函数
-from init_db import init_db
+# 数据库连接池
+from psycopg2 import pool
+connection_pool = pool.SimpleConnectionPool(
+    minconn=1,
+    maxconn=10,
+    dbname=os.getenv('PGDATABASE'),
+    user=os.getenv('PGUSER'),
+    password=os.getenv('PGPASSWORD'),
+    host=os.getenv('PGHOST'),
+    port=os.getenv('PGPORT'),
+    sslmode='prefer'
+)
+
+def get_db_connection():
+    return connection_pool.getconn()
+
+def release_db_connection(conn):
+    connection_pool.putconn(conn)
+
+# 数据库初始化函数
+def init_db():
+    """初始化数据库表结构（如果不存在）"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 创建API密钥表
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR(36) UNIQUE NOT NULL,
+                    expiry_time TIMESTAMPTZ NOT NULL
+                )
+            ''')
+            # 创建任务记录表
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS conversions (
+                    id SERIAL PRIMARY KEY,
+                    task_id VARCHAR(255) UNIQUE NOT NULL,
+                    youtube_id VARCHAR(11) NOT NULL,
+                    status VARCHAR(50) DEFAULT 'pending',
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ''')
+            conn.commit()
+    finally:
+        release_db_connection(conn)
 
 @auth.verify_password
 def verify_password(username, password):
@@ -40,32 +86,86 @@ def admin():
             # 生成有效期180天的新密钥
             new_key = str(uuid.uuid4())
             expiry = datetime.now() + timedelta(days=180)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # 下载最佳音质音频流
-                stream = yt.streams.filter(only_audio=True).order_by('abr').last()
-                download_path = stream.download(output_path=tmpdir)
-                
-                # FFmpeg转换参数
-                output_path = os.path.join(tmpdir, f'{video_id}.mp3')
-                subprocess.run([
-                    'ffmpeg',
-                    '-i', download_path,    # 输入文件
-                    '-vn',                  # 禁用视频流
-                    '-ar', '44100',         # 采样率44.1kHz（CD标准）
-                    '-ac', '2',             # 立体声
-                    '-b:a', '192k',         # 音频比特率
-                    '-y',                   # 覆盖输出文件（防止报错）
-                    output_path
-                ], check=True, timeout=300)  # 设置5分钟超时
-                
-                # 示例返回（需替换为实际云存储地址）
-                mp3_url = upload_to_s3(output_path, video_id)
-                return {'url': mp3_url}
-        except subprocess.TimeoutExpired:
-            self.retry(countdown=60, exc=Exception('FFmpeg转换超时'))
-        except Exception as e:
-            self.retry(countdown=30, exc=e)  # 30秒后重试
-            return {'error': str(e)}
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'INSERT INTO api_keys (key, expiry_time) VALUES (%s, %s)',
+                        (new_key, expiry)
+                    )
+                conn.commit()
+            finally:
+                release_db_connection(conn)
+        elif action == 'delete':
+            # 删除指定密钥
+            key = request.form.get('key')
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute('DELETE FROM api_keys WHERE key = %s', (key,))
+                conn.commit()
+            finally:
+                release_db_connection(conn)
+        return redirect(url_for('admin'))
+    
+    # 获取当前有效密钥列表
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute('SELECT key, expiry_time FROM api_keys WHERE expiry_time > NOW()')
+            keys = cur.fetchall()
+    finally:
+        release_db_connection(conn)
+    return render_template('admin.html', api_keys=keys)
+
+@app.route('/convert', methods=['POST'])
+def convert():
+    """提交视频转换任务"""
+    try:
+        # API密钥验证
+        api_key = request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+        if not api_key:
+            return jsonify({'error': 'Missing API key'}), 401
+        
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT 1 FROM api_keys WHERE key = %s AND expiry_time > NOW()', (api_key,))
+                if not cur.fetchone():
+                    return jsonify({'error': 'Invalid or expired API key'}), 401
+        finally:
+            release_db_connection(conn)
+        
+        # URL格式校验
+        youtube_url = request.json.get('youtube_url')
+        if not re.match(r'^https?://(www\.)?(youtube\.com|youtu\.be)/', youtube_url):
+            return jsonify({'error': 'Invalid YouTube URL'}), 400
+        
+        # 提交异步任务
+        from tasks import process_video
+        task = process_video.delay(youtube_url)
+        return jsonify({
+            'task_id': task.id,
+            'status_url': f'/status/{task.id}'
+        }), 202
+    except Exception as e:
+        logging.error(f"Error in /convert: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/status/<task_id>')
+def get_status(task_id):
+    """查询任务状态"""
+    try:
+        from tasks import process_video
+        task = process_video.AsyncResult(task_id)
+        return jsonify({
+            'task_id': task.id,
+            'status': task.state,
+            'result': task.result if task.ready() else None
+        })
+    except Exception as e:
+        logging.error(f"Error in /status: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     # 启动时初始化数据库并运行服务
