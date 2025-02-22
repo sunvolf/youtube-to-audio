@@ -1,8 +1,9 @@
 services:
+  # Web Service
   - type: web
     name: youtube-converter-web
     runtime: docker
-    plan: free  # 生产环境建议升级至starter
+    plan: free
     buildCommand: |
       docker build -t youtube-converter-web .
     startCommand: docker run --rm -p $PORT:5000 youtube-converter-web
@@ -43,6 +44,7 @@ services:
       - key: ADMIN_PASSWORD
         fromSecret: admin_password
 
+  # Background Worker
   - type: worker
     name: celery-worker
     runtime: docker
