@@ -1,13 +1,11 @@
 services:
   - type: web
     name: youtube-converter-web
-    runtime: python
+    runtime: docker
     plan: free  # 生产环境建议升级至starter
-    buildCommand: |-
-      apt-get update && apt-get install -y ffmpeg
-      pip install -r requirements.txt
-      python -c "from init_db import init_db; init_db()"
-    startCommand: gunicorn app:app -k gevent -b 0.0.0.0:$PORT
+    buildCommand: |
+      docker build -t youtube-converter-web .
+    startCommand: docker run --rm -p $PORT:5000 youtube-converter-web
     envVars:
       - key: PGDATABASE
         fromDatabase:
@@ -44,31 +42,13 @@ services:
         fromSecret: admin_user
       - key: ADMIN_PASSWORD
         fromSecret: admin_password
-  - type: worker
-    name: celery-worker
-    runtime: python
-    plan: free
-    buildCommand: |-
-      apt-get update && apt-get install -y ffmpeg
-      pip install -r requirements.txt
-    startCommand: celery -A tasks worker --loglevel=info --concurrency=2
-    envVars:
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: youtube-converter-redis
-          property: connectionString
-      - key: AWS_ACCESS_KEY_ID
-        fromSecret: aws_access_key_id
-      - key: AWS_SECRET_ACCESS_KEY
-        fromSecret: aws_secret_access_key
-      - key: S3_BUCKET
-        fromSecret: s3_bucket
+
 databases:
   - name: youtube-converter-db
     databaseName: youtube_conv
     user: yt_admin
     plan: free
+
 redis:
   - name: youtube-converter-redis
     plan: free
