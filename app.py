@@ -21,16 +21,21 @@ auth = HTTPBasicAuth()
 
 # 数据库连接池
 from psycopg2 import pool
-connection_pool = pool.SimpleConnectionPool(
-    minconn=1,
-    maxconn=10,
-    dbname=os.getenv('PGDATABASE'),
-    user=os.getenv('PGUSER'),
-    password=os.getenv('PGPASSWORD'),
-    host=os.getenv('PGHOST'),
-    port=os.getenv('PGPORT'),
-    sslmode='prefer'
-)
+try:
+    connection_pool = pool.SimpleConnectionPool(
+        minconn=1,
+        maxconn=10,
+        dbname=os.getenv('PGDATABASE'),
+        user=os.getenv('PGUSER'),
+        password=os.getenv('PGPASSWORD'),
+        host=os.getenv('PGHOST'),  # 确保这里只包含主机名
+        port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
+        sslmode='prefer'
+    )
+    logging.info("Database connection pool initialized successfully.")
+except Exception as e:
+    logging.error(f"Failed to initialize database connection pool: {e}")
+    raise
 
 def get_db_connection():
     return connection_pool.getconn()
@@ -41,8 +46,8 @@ def release_db_connection(conn):
 # 数据库初始化函数
 def init_db():
     """初始化数据库表结构（如果不存在）"""
-    conn = get_db_connection()
     try:
+        conn = get_db_connection()
         with conn.cursor() as cur:
             # 创建API密钥表
             cur.execute('''
@@ -63,6 +68,10 @@ def init_db():
                 )
             ''')
             conn.commit()
+        logging.info("Database tables initialized successfully.")
+    except Exception as e:
+        logging.error(f"Failed to initialize database tables: {e}")
+        raise
     finally:
         release_db_connection(conn)
 
@@ -169,5 +178,9 @@ def get_status(task_id):
 
 if __name__ == '__main__':
     # 启动时初始化数据库并运行服务
-    init_db()
-    app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
+    try:
+        init_db()
+        app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
+    except Exception as e:
+        logging.error(f"Failed to start application: {e}")
+        raise
