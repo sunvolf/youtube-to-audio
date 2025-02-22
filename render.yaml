@@ -43,6 +43,26 @@ services:
       - key: ADMIN_PASSWORD
         fromSecret: admin_password
 
+  - type: worker
+    name: celery-worker
+    runtime: docker
+    plan: free
+    buildCommand: |
+      docker build -t youtube-converter-worker .
+    startCommand: docker run --rm youtube-converter-worker
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: youtube-converter-redis
+          property: connectionString
+      - key: AWS_ACCESS_KEY_ID
+        fromSecret: aws_access_key_id
+      - key: AWS_SECRET_ACCESS_KEY
+        fromSecret: aws_secret_access_key
+      - key: S3_BUCKET
+        fromSecret: s3_bucket
+
 databases:
   - name: youtube-converter-db
     databaseName: youtube_conv
