@@ -1,8 +1,21 @@
 import os
 import psycopg2
+from psycopg2.extras import RealDictCursor
+from psycopg2 import pool
+import logging
+from dotenv import load_dotenv
 
-def get_db_connection():
-    return psycopg2.connect(
+# 配置日志记录
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# 加载环境变量
+load_dotenv()
+
+# 数据库连接池
+try:
+    connection_pool = pool.SimpleConnectionPool(
+        minconn=1,
+        maxconn=10,
         dbname=os.getenv('PGDATABASE'),
         user=os.getenv('PGUSER'),
         password=os.getenv('PGPASSWORD'),
@@ -10,9 +23,20 @@ def get_db_connection():
         port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
         sslmode='require'  # 使用 SSL 连接
     )
+    logging.info("Database connection pool initialized successfully.")
+except Exception as e:
+    logging.error(f"Failed to initialize database connection pool: {e}")
+    raise
+
+def get_db_connection():
+    return connection_pool.getconn()
+
+def release_db_connection(conn):
+    connection_pool.putconn(conn)
 
 def init_db():
     """初始化数据库表结构（如果不存在）"""
+    conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
@@ -34,13 +58,18 @@ def init_db():
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
-        conn.commit()
-        print("Database tables initialized successfully.")
+            conn.commit()
+        logging.info("Database tables initialized successfully.")
     except Exception as e:
-        print(f"Failed to initialize database tables: {e}")
+        logging.error(f"Failed to initialize database tables: {e}")
     finally:
-        if 'conn' in locals():
+        if conn:
             release_db_connection(conn)
 
 if __name__ == '__main__':
-    init_db()
+    try:
+        init_db()
+    finally:
+        if connection_pool:
+            connection_pool.closeall()
+            logging.info("Database connection pool closed.")

@@ -4,6 +4,16 @@
 echo "Updating system packages..."
 sudo apt-get update && sudo apt-get upgrade -y
 
+# 安装必要的工具
+echo "Installing necessary tools..."
+sudo apt-get install -y \
+    git \
+    python3 \
+    python3-pip \
+    python3-venv \
+    ffmpeg \
+    openssh-client
+
 # 安装 Docker 和 Docker Compose
 echo "Installing Docker and Docker Compose..."
 if ! command -v docker &> /dev/null; then
@@ -44,13 +54,23 @@ else
     echo ".env file already exists. Skipping upload."
 fi
 
+# 创建虚拟环境并安装依赖项
+echo "Creating virtual environment and installing dependencies..."
+cd $PROJECT_DIR
+python3 -m venv venv
+source venv/bin/activate
+pip install --no-cache-dir -r requirements.txt
+deactivate
+
 # 初始化数据库
 echo "Initializing database..."
-cd $PROJECT_DIR && python3 init_db.py
+source venv/bin/activate
+python init_db.py
+deactivate
 
 # 构建并启动服务
 echo "Building and starting services..."
-cd $PROJECT_DIR && docker-compose down && docker-compose up -d --build
+docker-compose down && docker-compose up -d --build
 
 # 提示部署完成
 echo "Deployment complete! Access the web service at http://<your-ec2-public-ip>:5000"
