@@ -5,7 +5,7 @@ sudo apt-get update
 sudo apt-get install -y docker.io docker-compose
 
 # 克隆项目代码
-git clone https://github.com/your-repo/youtube-converter.git
+git clone https://github.com/sunvolf/youtube-to-audio.git
 cd youtube-converter
 
 # 构建并启动服务
