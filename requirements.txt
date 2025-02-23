@@ -1,21 +1,23 @@
-# Web 服务器核心依赖
-Flask==3.0.0               # Flask 框架（Web 应用核心）
-gunicorn==21.2.0           # WSGI 服务器，用于生产环境部署
-gevent==23.9.1            # 协程支持（如果不需要可以移除）
+# Flask 框架和相关扩展
+Flask==3.0.0  # Web 应用框架
+gunicorn==21.2.0  # WSGI HTTP 服务器
 
-# 异步任务处理
-celery==5.3.4              # Celery 异步任务队列（用于视频处理任务）
-redis==5.0.1               # Redis 连接库（用于 Celery 的消息代理和结果后端）
+# Celery 和 Redis 相关库
+celery==5.3.4  # 异步任务队列
+redis==5.0.1  # Redis 客户端
 
-# 数据库支持
-psycopg2-binary==2.9.9     # PostgreSQL 驱动（仅用于开发/测试，生产环境建议使用 psycopg2）
+# 数据库相关库
+psycopg2-binary==2.9.9  # PostgreSQL 数据库驱动
 
-# YouTube 处理
-pytube==15.0.0             # YouTube 视频下载库（解析和下载音频流）
+# YouTube 视频下载库
+pytube==15.0.0  # 下载 YouTube 视频
 
-# 辅助工具
-python-dotenv==1.0.0       # 环境变量加载工具（读取 .env 文件中的配置）
-flask-httpauth==4.8.0      # HTTP Basic Auth 支持（管理员界面身份验证）
+# AWS S3 相关库
+boto3==1.34.43  # AWS SDK for Python
 
-# 日志与调试（可选）
-loguru==0.7.2              # 增强日志记录功能（替代标准库 logging，简化日志管理）
+# 其他常用库
+python-dotenv==1.0.0  # 环境变量管理
+flask-httpauth==4.8.0  # 基于 HTTP 的认证库
+
+# 日志记录库
+loguru==0.7.2  # 更强大的日志记录库（可选）

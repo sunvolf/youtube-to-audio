@@ -13,10 +13,10 @@ import logging
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 初始化Celery应用（使用Redis作为消息代理和结果后端）
+# 初始化Celery应用（使用AWS ElastiCache Redis）
 app = Celery(
     'tasks',
-    broker=os.getenv('REDIS_URL'),
+    broker=os.getenv('REDIS_URL'),  # AWS ElastiCache Redis 地址
     backend=os.getenv('REDIS_URL')
 )
 
