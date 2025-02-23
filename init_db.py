@@ -40,4 +40,7 @@ def init_db():
         print(f"Failed to initialize database tables: {e}")
     finally:
         if 'conn' in locals():
-            conn.close()
+            release_db_connection(conn)
+
+if __name__ == '__main__':
+    init_db()
