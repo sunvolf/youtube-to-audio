@@ -11,8 +11,39 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # 加载环境变量
 load_dotenv()
 
+def create_database_if_not_exists():
+    """检查并创建目标数据库"""
+    try:
+        # 连接到默认数据库 'postgres'
+        conn = psycopg2.connect(
+            dbname="postgres",
+            user=os.getenv('PGUSER'),
+            password=os.getenv('PGPASSWORD'),
+            host=os.getenv('PGHOST'),
+            port=os.getenv('PGPORT', 5432),
+            sslmode='require'
+        )
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            # 检查目标数据库是否存在
+            db_name = os.getenv('PGDATABASE')
+            cur.execute(f"SELECT 1 FROM pg_database WHERE datname='{db_name}'")
+            if not cur.fetchone():
+                logging.info(f"Database '{db_name}' does not exist. Creating it...")
+                cur.execute(f"CREATE DATABASE {db_name}")
+                logging.info(f"Database '{db_name}' created successfully.")
+            else:
+                logging.info(f"Database '{db_name}' already exists.")
+    except Exception as e:
+        logging.error(f"Failed to check or create database: {e}")
+        raise
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
 # 数据库连接池
 try:
+    create_database_if_not_exists()  # 确保数据库存在
     connection_pool = pool.SimpleConnectionPool(
         minconn=1,
         maxconn=10,
