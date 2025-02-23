@@ -1,25 +1,15 @@
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor
-
-# 数据库连接池
-from psycopg2 import pool
-connection_pool = pool.SimpleConnectionPool(
-    minconn=1,
-    maxconn=10,
-    dbname=os.getenv('PGDATABASE'),
-    user=os.getenv('PGUSER'),
-    password=os.getenv('PGPASSWORD'),
-    host=os.getenv('PGHOST'),  # AWS RDS 主机名
-    port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
-    sslmode='require'  # 使用 SSL 连接
-)
 
 def get_db_connection():
-    return connection_pool.getconn()
-
-def release_db_connection(conn):
-    connection_pool.putconn(conn)
+    return psycopg2.connect(
+        dbname=os.getenv('PGDATABASE'),
+        user=os.getenv('PGUSER'),
+        password=os.getenv('PGPASSWORD'),
+        host=os.getenv('PGHOST'),  # AWS RDS 主机名
+        port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
+        sslmode='require'  # 使用 SSL 连接
+    )
 
 def init_db():
     """初始化数据库表结构（如果不存在）"""
@@ -44,9 +34,10 @@ def init_db():
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
-            conn.commit()
+        conn.commit()
         print("Database tables initialized successfully.")
     except Exception as e:
         print(f"Failed to initialize database tables: {e}")
     finally:
-        release_db_connection(conn)
+        if 'conn' in locals():
+            conn.close()
