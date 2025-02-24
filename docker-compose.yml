@@ -1,5 +1,10 @@
 version: '3.8'
 
+# 定义专用网络
+networks:
+  app-network:
+    driver: bridge
+
 services:
   web:
     build: .
@@ -17,14 +22,40 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - ADMIN_USER=${ADMIN_USER}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    user: "1001:1001"  # 使用固定的 UID 和 GID 运行 Web 服务
     restart: always
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   worker:
     build: .
-    command: celery -A tasks worker --loglevel=info
+    command: celery -A tasks worker --loglevel=info  # 直接使用全局安装的 celery
     environment:
+      - PGDATABASE=${PGDATABASE}
+      - PGUSER=${PGUSER}
+      - PGPASSWORD=${PGPASSWORD}
+      - PGHOST=${PGHOST}
+      - PGPORT=${PGPORT}
       - REDIS_URL=${REDIS_URL}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+    user: "1001:1001"  # 使用固定的 UID 和 GID 运行 Worker 服务
     restart: always
+    networks:
+      - app-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

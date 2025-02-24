@@ -10,18 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 检出代码
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
+    # 缓存 pip 依赖项
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    # 设置 Python 环境
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.9'
 
+    # 安装依赖项
     - name: Install dependencies
       run: |
+        pip install --upgrade pip
         pip install -r requirements.txt
 
+    # 验证 Dockerfile 是否正确
+    - name: Validate Dockerfile
+      run: |
+        docker build --no-cache --dry-run .
+
+    # 安装最新版本的 AWS CLI
+    - name: Install AWS CLI
+      run: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip awscliv2.zip
+        sudo ./aws/install
+
+    # 构建和推送 Docker 镜像
     - name: Build and push Docker image
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -29,12 +55,19 @@ jobs:
         ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       run: |
+        set -e  # 如果任何命令失败，则立即退出
+        # 构建镜像
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA .
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        echo $AWS_ACCESS_KEY_ID | docker login --username AWS --password-stdin $ECR_REGISTRY
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
+        # 登录 ECR
+        echo $AWS_SECRET_ACCESS_KEY | docker login --username AWS --password-stdin $ECR_REGISTRY || exit 1
+
+        # 推送镜像
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA || exit 1
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest || exit 1
+
+    # 部署到 AWS ECS
     - name: Deploy to AWS ECS
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -43,4 +76,9 @@ jobs:
         ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
         ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
       run: |
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --task-definition $ECS_TASK_DEFINITION
+        set -e  # 如果任何命令失败，则立即退出
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_SERVICE \
+          --task-definition $ECS_TASK_DEFINITION \
+          --force-new-deployment || exit 1
