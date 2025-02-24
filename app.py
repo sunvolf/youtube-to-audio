@@ -22,7 +22,7 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 auth = HTTPBasicAuth()
 
 # 导入数据库初始化函数
-from init_db import get_db_connection, release_db_connection
+from init_db import initialize_connection_pool, init_db, get_db_connection, release_db_connection
 
 @auth.verify_password
 def verify_password(username, password):
@@ -144,10 +144,8 @@ def get_status(task_id):
 
 if __name__ == '__main__':
     try:
-        # 导入数据库初始化函数
-        from init_db import initialize_connection_pool, init_db
-
         # 在应用启动时初始化数据库连接池和表结构
+        from init_db import initialize_connection_pool, init_db
         initialize_connection_pool()
         init_db()
         app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))

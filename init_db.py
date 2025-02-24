@@ -60,11 +60,10 @@ def initialize_connection_pool():
                 port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
                 sslmode='require'  # 使用 SSL 连接
             )
-            if connection_pool:
-                logging.info("Database connection pool initialized successfully.")
-            else:
+            if not connection_pool:
                 logging.error("Failed to initialize database connection pool. Pool is None.")
                 raise Exception("Database connection pool is None.")
+            logging.info("Database connection pool initialized successfully.")
         except Exception as e:
             logging.error(f"Failed to initialize database connection pool: {e}")
             raise
