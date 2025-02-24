@@ -30,7 +30,7 @@ def create_database_if_not_exists():
             cur.execute(f"SELECT 1 FROM pg_database WHERE datname='{db_name}'")
             if not cur.fetchone():
                 logging.info(f"Database '{db_name}' does not exist. Creating it...")
-                cur.execute(f"CREATE DATABASE {db_name}")
+                cur.execute(f'CREATE DATABASE "{db_name}"')  # 使用双引号支持特殊字符（可选）
                 logging.info(f"Database '{db_name}' created successfully.")
             else:
                 logging.info(f"Database '{db_name}' already exists.")
