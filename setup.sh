@@ -63,14 +63,12 @@ clone_or_update_repo() {
     else
         echo "Project directory exists. Pulling latest code..."
         cd $PROJECT_DIR
-
         # 检查是否有未提交的更改
         if [[ -n $(git status --porcelain) ]]; then
             echo "Local changes detected. Stashing changes to avoid conflicts..."
             git stash
             check_success "Stashing local changes"
         fi
-
         # 拉取最新代码
         git pull origin main
         check_success "Repository update"
@@ -90,7 +88,6 @@ upload_env_file() {
     if [ ! -f "$PROJECT_DIR/.env" ]; then
         echo "Please upload the .env file to the project directory: $PROJECT_DIR"
         read -p "Press Enter after uploading the .env file..."
-
         # 验证 .env 文件是否已上传
         if [ ! -f "$PROJECT_DIR/.env" ]; then
             echo "Error: .env file not found in $PROJECT_DIR. Please ensure it is uploaded."
@@ -120,12 +117,53 @@ setup_virtualenv_and_dependencies() {
     deactivate
 }
 
-# 初始化数据库
+# 初始化数据库（覆盖安装）
 initialize_database() {
-    echo "Initializing database..."
+    echo "Initializing database (covering existing data)..."
     source $VENV_DIR/bin/activate
+
+    # 删除现有数据库内容
+    python -c "
+import os
+import psycopg2
+from dotenv import load_dotenv
+
+load_dotenv()
+
+try:
+    conn = psycopg2.connect(
+        dbname='postgres',
+        user=os.getenv('PGUSER'),
+        password=os.getenv('PGPASSWORD'),
+        host=os.getenv('PGHOST'),
+        port=os.getenv('PGPORT', 5432),
+        sslmode='require'
+    )
+    conn.autocommit = True
+    cur = conn.cursor()
+    
+    # 删除现有数据库
+    db_name = os.getenv('PGDATABASE')
+    cur.execute(f'DROP DATABASE IF EXISTS \"{db_name}\"')
+    logging.info(f'Database \"{db_name}\" dropped successfully.')
+
+    # 重新创建数据库
+    cur.execute(f'CREATE DATABASE \"{db_name}\"')
+    logging.info(f'Database \"{db_name}\" created successfully.')
+except Exception as e:
+    logging.error(f'Failed to drop or create database: {e}')
+    raise
+finally:
+    if 'cur' in locals():
+        cur.close()
+    if 'conn' in locals():
+        conn.close()
+"
+
+    # 执行 init_db.py 初始化表结构
     python $PROJECT_DIR/init_db.py
     check_success "Database initialization"
+
     deactivate
 }
 

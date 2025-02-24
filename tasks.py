@@ -63,6 +63,10 @@ def process_video(self, youtube_url):
             # 下载最佳音质音频流
             logging.info(f"Downloading audio stream for video: {video_id}")
             stream = yt.streams.filter(only_audio=True).order_by('abr').last()
+            if not stream:
+                logging.error(f"No audio stream found for video: {video_id}")
+                return {'error': 'No audio stream found for the given YouTube URL'}
+            
             download_path = stream.download(output_path=tmpdir)
             logging.info(f"Downloaded audio stream to: {download_path}")
             
@@ -84,6 +88,9 @@ def process_video(self, youtube_url):
                 logging.warning("FFmpeg转换超时，重试中...")
                 self.retry(countdown=min(60 * 2 ** self.request.retries, 3600), exc=Exception('FFmpeg转换超时'))
                 return {'error': 'FFmpeg conversion timed out'}
+            except subprocess.CalledProcessError as e:
+                logging.error(f"FFmpeg转换失败: {e}")
+                return {'error': 'FFmpeg conversion failed'}
             
             # 上传到S3并返回URL
             mp3_url = upload_to_s3(output_path, video_id)

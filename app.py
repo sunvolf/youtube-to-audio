@@ -8,88 +8,33 @@ import re
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_httpauth import HTTPBasicAuth
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import logging
+from dotenv import load_dotenv
 
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# 加载环境变量
+load_dotenv()
 
 # 初始化Flask应用
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 auth = HTTPBasicAuth()
 
-# 数据库连接池
-from psycopg2 import pool
-try:
-    connection_pool = pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        dbname=os.getenv('PGDATABASE'),
-        user=os.getenv('PGUSER'),
-        password=os.getenv('PGPASSWORD'),
-        host=os.getenv('PGHOST'),  # AWS RDS 主机名
-        port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
-        sslmode='require'  # 使用 SSL 连接
-    )
-    logging.info("Database connection pool initialized successfully.")
-except Exception as e:
-    logging.error(f"Failed to initialize database connection pool: {e}")
-    raise
-
-def get_db_connection():
-    return connection_pool.getconn()
-
-def release_db_connection(conn):
-    connection_pool.putconn(conn)
-
 # 数据库初始化函数
-def init_db():
-    """
-    初始化数据库表结构
-    如果表已存在，则跳过初始化
-    """
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            # 检查 api_keys 表是否存在
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'api_keys'
-                );
-            """)
-            table_exists = cur.fetchone()[0]
-            
-            if not table_exists:
-                # 创建 api_keys 表
-                cur.execute("""
-                    CREATE TABLE api_keys (
-                        key TEXT PRIMARY KEY,
-                        expiry_time TIMESTAMP NOT NULL
-                    );
-                """)
-                logging.info("Table 'api_keys' created successfully.")
-            else:
-                logging.info("Table 'api_keys' already exists. Skipping initialization.")
-        
-        conn.commit()
-    except Exception as e:
-        logging.error(f"Failed to initialize database: {e}")
-        conn.rollback()
-        raise
-    finally:
-        release_db_connection(conn)
+from init_db import initialize_connection_pool, get_db_connection, release_db_connection, init_db
 
 @auth.verify_password
 def verify_password(username, password):
     """管理员界面身份验证"""
     return username == os.getenv('ADMIN_USER') and password == os.getenv('ADMIN_PASSWORD')
 
+
 @app.route('/')
 def index():
     """服务主页"""
     return "YouTube音频转换服务 - 访问 /admin 管理API密钥"
+
 
 @app.route('/admin', methods=['GET', 'POST'])
 @auth.login_required
@@ -132,6 +77,7 @@ def admin():
     finally:
         release_db_connection(conn)
     return render_template('admin.html', api_keys=keys)
+
 
 @app.route('/convert', methods=['POST'])
 def convert():
@@ -179,6 +125,7 @@ def convert():
         logging.error(f"Error in /convert: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
+
 @app.route('/status/<task_id>')
 def get_status(task_id):
     """查询任务状态"""
@@ -194,14 +141,14 @@ def get_status(task_id):
         logging.error(f"Error in /status: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
+
 if __name__ == '__main__':
-    # 启动时初始化数据库并运行服务
     try:
-        # 初始化数据库（仅在表不存在时执行）
-        init_db()
-        
-        # 启动 Flask 应用
+        from init_db import initialize_connection_pool, init_db
+        initialize_connection_pool()  # 初始化数据库连接池
+        init_db()  # 初始化数据库表结构
         app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
-    except Exception as e:
-        logging.error(f"Failed to start application: {e}")
-        raise
+    finally:
+        if 'connection_pool' in globals():
+            connection_pool.closeall()
+            logging.info("Database connection pool closed.")

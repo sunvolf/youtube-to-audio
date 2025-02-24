@@ -1,6 +1,5 @@
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
 import logging
 from dotenv import load_dotenv
@@ -10,6 +9,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # 加载环境变量
 load_dotenv()
+
+# 数据库连接池
+connection_pool = None
 
 def create_database_if_not_exists():
     """检查并创建目标数据库"""
@@ -41,29 +43,36 @@ def create_database_if_not_exists():
         if 'conn' in locals():
             conn.close()
 
-# 数据库连接池
-try:
-    create_database_if_not_exists()  # 确保数据库存在
-    connection_pool = pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        dbname=os.getenv('PGDATABASE'),
-        user=os.getenv('PGUSER'),
-        password=os.getenv('PGPASSWORD'),
-        host=os.getenv('PGHOST'),  # AWS RDS 主机名
-        port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
-        sslmode='require'  # 使用 SSL 连接
-    )
-    logging.info("Database connection pool initialized successfully.")
-except Exception as e:
-    logging.error(f"Failed to initialize database connection pool: {e}")
-    raise
+
+def initialize_connection_pool():
+    """初始化数据库连接池"""
+    global connection_pool
+    if not connection_pool:
+        try:
+            create_database_if_not_exists()  # 确保数据库存在
+            connection_pool = pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                dbname=os.getenv('PGDATABASE'),
+                user=os.getenv('PGUSER'),
+                password=os.getenv('PGPASSWORD'),
+                host=os.getenv('PGHOST'),  # AWS RDS 主机名
+                port=os.getenv('PGPORT', 5432),  # 默认端口为 5432
+                sslmode='require'  # 使用 SSL 连接
+            )
+            logging.info("Database connection pool initialized successfully.")
+        except Exception as e:
+            logging.error(f"Failed to initialize database connection pool: {e}")
+            raise
+
 
 def get_db_connection():
     return connection_pool.getconn()
 
+
 def release_db_connection(conn):
     connection_pool.putconn(conn)
+
 
 def init_db():
     """初始化数据库表结构（如果不存在）"""
@@ -102,10 +111,12 @@ def init_db():
         if conn:
             release_db_connection(conn)
 
+
 if __name__ == '__main__':
     try:
-        init_db()
+        initialize_connection_pool()  # 初始化数据库连接池
+        init_db()  # 初始化数据库表结构
     finally:
-        if 'connection_pool' in globals():
+        if connection_pool:
             connection_pool.closeall()
             logging.info("Database connection pool closed.")
