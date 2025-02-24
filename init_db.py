@@ -79,6 +79,8 @@ def init_db():
                     expiry_time TIMESTAMPTZ NOT NULL
                 )
             ''')
+            logging.info("Table 'api_keys' initialized successfully.")
+
             # 创建任务记录表
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS conversions (
@@ -89,10 +91,13 @@ def init_db():
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
+            logging.info("Table 'conversions' initialized successfully.")
+
             conn.commit()
-        logging.info("Database tables initialized successfully.")
     except Exception as e:
         logging.error(f"Failed to initialize database tables: {e}")
+        conn.rollback()
+        raise
     finally:
         if conn:
             release_db_connection(conn)
@@ -101,6 +106,6 @@ if __name__ == '__main__':
     try:
         init_db()
     finally:
-        if connection_pool:
+        if 'connection_pool' in globals():
             connection_pool.closeall()
             logging.info("Database connection pool closed.")

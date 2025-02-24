@@ -44,7 +44,42 @@ def release_db_connection(conn):
     connection_pool.putconn(conn)
 
 # 数据库初始化函数
-from init_db import init_db
+def init_db():
+    """
+    初始化数据库表结构
+    如果表已存在，则跳过初始化
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 检查 api_keys 表是否存在
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'api_keys'
+                );
+            """)
+            table_exists = cur.fetchone()[0]
+            
+            if not table_exists:
+                # 创建 api_keys 表
+                cur.execute("""
+                    CREATE TABLE api_keys (
+                        key TEXT PRIMARY KEY,
+                        expiry_time TIMESTAMP NOT NULL
+                    );
+                """)
+                logging.info("Table 'api_keys' created successfully.")
+            else:
+                logging.info("Table 'api_keys' already exists. Skipping initialization.")
+        
+        conn.commit()
+    except Exception as e:
+        logging.error(f"Failed to initialize database: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_db_connection(conn)
 
 @auth.verify_password
 def verify_password(username, password):
@@ -102,9 +137,15 @@ def admin():
 def convert():
     """提交视频转换任务"""
     try:
+        # 校验请求头
+        if request.content_type != 'application/json':
+            logging.error("Invalid Content-Type. Expected application/json.")
+            return jsonify({'error': 'Invalid Content-Type. Expected application/json.'}), 400
+
         # API密钥验证
         api_key = request.headers.get('Authorization', '').replace('Bearer ', '').strip()
         if not api_key:
+            logging.error("Missing API key in request headers.")
             return jsonify({'error': 'Missing API key'}), 401
         
         conn = get_db_connection()
@@ -112,18 +153,24 @@ def convert():
             with conn.cursor() as cur:
                 cur.execute('SELECT 1 FROM api_keys WHERE key = %s AND expiry_time > NOW()', (api_key,))
                 if not cur.fetchone():
+                    logging.error(f"Invalid or expired API key: {api_key}")
                     return jsonify({'error': 'Invalid or expired API key'}), 401
         finally:
             release_db_connection(conn)
         
         # URL格式校验
         youtube_url = request.json.get('youtube_url')
+        if not youtube_url:
+            logging.error("Missing 'youtube_url' field in request body.")
+            return jsonify({'error': 'Missing "youtube_url" field in request body'}), 400
         if not re.match(r'^https?://(www\.)?(youtube\.com|youtu\.be)/', youtube_url):
-            return jsonify({'error': 'Invalid YouTube URL'}), 400
+            logging.error(f"Invalid YouTube URL format: {youtube_url}")
+            return jsonify({'error': 'Invalid YouTube URL format. Expected format: https://www.youtube.com/watch?v=...'}), 400
         
         # 提交异步任务
         from tasks import process_video
         task = process_video.delay(youtube_url)
+        logging.info(f"Task submitted successfully. Task ID: {task.id}")
         return jsonify({
             'task_id': task.id,
             'status_url': f'/status/{task.id}'
@@ -150,7 +197,10 @@ def get_status(task_id):
 if __name__ == '__main__':
     # 启动时初始化数据库并运行服务
     try:
+        # 初始化数据库（仅在表不存在时执行）
         init_db()
+        
+        # 启动 Flask 应用
         app.run(host='0.0.0.0', port=os.getenv('PORT', 5000))
     except Exception as e:
         logging.error(f"Failed to start application: {e}")

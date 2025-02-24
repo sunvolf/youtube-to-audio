@@ -32,14 +32,19 @@ app.conf.update(
 
 def upload_to_s3(file_path, video_id):
     """将文件上传到AWS S3"""
-    s3 = boto3.client(
-        's3',
-        aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-    )
-    bucket_name = os.getenv('S3_BUCKET_NAME')
-    s3.upload_file(file_path, bucket_name, f'{video_id}.mp3')
-    return f'https://{bucket_name}.s3.amazonaws.com/{video_id}.mp3'
+    try:
+        s3 = boto3.client(
+            's3',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+        )
+        bucket_name = os.getenv('S3_BUCKET_NAME')
+        s3.upload_file(file_path, bucket_name, f'{video_id}.mp3')
+        logging.info(f"Uploaded file to S3: {bucket_name}/{video_id}.mp3")
+        return f'https://{bucket_name}.s3.amazonaws.com/{video_id}.mp3'
+    except Exception as e:
+        logging.error(f"Failed to upload file to S3: {e}")
+        raise
 
 @app.task(bind=True, max_retries=3)
 def process_video(self, youtube_url):
@@ -56,8 +61,10 @@ def process_video(self, youtube_url):
         # 使用临时目录处理文件（自动清理）
         with tempfile.TemporaryDirectory() as tmpdir:
             # 下载最佳音质音频流
+            logging.info(f"Downloading audio stream for video: {video_id}")
             stream = yt.streams.filter(only_audio=True).order_by('abr').last()
             download_path = stream.download(output_path=tmpdir)
+            logging.info(f"Downloaded audio stream to: {download_path}")
             
             # FFmpeg转换参数
             output_path = os.path.join(tmpdir, f'{video_id}.mp3')
@@ -72,6 +79,7 @@ def process_video(self, youtube_url):
                     '-y',                   # 覆盖输出文件（防止报错）
                     output_path
                 ], check=True, timeout=300)  # 设置5分钟超时
+                logging.info(f"Converted audio to MP3: {output_path}")
             except subprocess.TimeoutExpired:
                 logging.warning("FFmpeg转换超时，重试中...")
                 self.retry(countdown=min(60 * 2 ** self.request.retries, 3600), exc=Exception('FFmpeg转换超时'))
@@ -79,6 +87,7 @@ def process_video(self, youtube_url):
             
             # 上传到S3并返回URL
             mp3_url = upload_to_s3(output_path, video_id)
+            logging.info(f"Generated MP3 URL: {mp3_url}")
             return {'url': mp3_url}
     except Exception as e:
         logging.error(f"Error processing video: {e}")
